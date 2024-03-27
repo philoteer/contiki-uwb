@@ -11,7 +11,8 @@ import pylink
 PORT_NAMES = {"one":"/dev/ttyACM0","two":"/dev/ttyACM1"}
 SAVE_PATHS = {"one":"out1.txt","two":"out2.txt"}
 INDICATOR = {"one":"*","two":"#"}
-JLINK_DEV_LIST = [760126688, 760126516] #JLinkExe -> showemulist
+#JLINK_DEV_LIST = [760126688, 760126516] #JLinkExe -> showemulist
+JLINK_DEV_LIST = [760126527,760125932]
 
 ser = {}
 f_out = {}
@@ -37,6 +38,7 @@ ser_GPIO_DEVICE = serial.Serial(
 # Functions
 #################################################################
 def rx_thread(PORT_NAME):
+	reset_counter = 0
 	while(True):
 		try:
 			input_data = ser[PORT_NAME].readline().decode("ASCII")
@@ -44,24 +46,41 @@ def rx_thread(PORT_NAME):
 				f_out[PORT_NAME].write(f"{time.time() - start_time},{input_data.split(' ')[-1]}")
 				f_out[PORT_NAME].flush()
 				print(INDICATOR[PORT_NAME], end="",flush=True)
+				reset_counter = 0
+			elif ("FAIL" in input_data):
+				print(input_data)
+				reset_counter +=1 
+				if(reset_counter > 20):
+					reset_devices()
+					reset_counter = 0
 		except:
 			if(f_out[PORT_NAME].closed):
+				print("Thread Quit.")
 				break
 			else:
 				print("?",end="",flush=True)
-			
+
 #Implement this to send the start signal (via GPIO or something)
 def gpio_signal_start():
 	print("Start signal")
 	ser_GPIO_DEVICE.write(GPIO_UP_COMMAND)
 	print(ser_GPIO_DEVICE.readline().decode("ASCII"))
-	
+
 #Implement this to send the end signal (via GPIO or something)
 def gpio_signal_end():
 	print("End signal")
 	ser_GPIO_DEVICE.write(GPIO_DOWN_COMMAND)
 	print(ser_GPIO_DEVICE.readline().decode("ASCII"))
 
+def reset_devices():
+	for DEV in JLINK_DEV_LIST:
+		jlink = pylink.JLink()
+		jlink.open(DEV)
+		jlink.connect("nrf52832_xxAA",speed=1000)
+		print(f"Jlink status: {jlink.target_connected()}")
+		jlink.reset()
+		jlink.close()
+	
 #################################################################
 
 # main()
@@ -71,14 +90,7 @@ gpio_signal_end()
 print("press enter to continue.")
 input()
 
-for DEV in JLINK_DEV_LIST:
-	jlink = pylink.JLink()
-	jlink.open(DEV)
-	jlink.connect("nrf52832_xxAA",speed=1000)
-	print(f"Jlink status: {jlink.target_connected()}")
-	jlink.reset()
-	jlink.close()
-	
+reset_devices()
 start_time = time.time()
 gpio_signal_start()
 
